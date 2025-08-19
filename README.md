@@ -11,12 +11,15 @@ TUI interface (based on `rich`) to control and monitor the program.
 ## Features
 - Connect to a Minecraft server via RCON (`mcrcon`).
 - Automatically move the player in a spiral in a chosen dimension.
-- Save and resume state through JSON files (`.mc_spiral_save.json` or `saves/` directory).
+- Save and resume state through JSON files in the `saves/` directory.
 - Configurable through `config.json`.
 - Text User Interface (TUI) for monitoring and controlling the process.
-- Controls to start, stop, and supervise exploration.
+- Send custom RCON commands to the server.
+- Read and display Minecraft chat messages.
+- Send messages to the in-game chat.
 
 ## Requirements
+- Full access to the target Minecraft server with RCON enabled.
 - Python 3.8+
 - [mcrcon](https://pypi.org/project/mcrcon/) >= 0.7.0
 - [rich](https://pypi.org/project/rich/) >= 13.7.0
@@ -64,5 +67,4 @@ python main.py
 ```
 
 ## Saves
-- Exploration state is auto-saved in `.mc_spiral_save.json`.
 - Multiple save states are stored in `saves/`.

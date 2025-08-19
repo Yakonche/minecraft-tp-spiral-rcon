@@ -11,12 +11,15 @@ Interface TUI (basée sur `rich`) pour contrôler et suivre l'état du programme
 ## Fonctionnalités
 - Connexion à un serveur Minecraft via RCON (`mcrcon`).
 - Déplacement automatique du joueur en spirale dans une dimension choisie.
-- Sauvegarde et reprise d'état via fichiers JSON (`.mc_spiral_save.json` ou répertoires de `saves/`).
+- Sauvegarde et reprise d'état via fichiers JSON dans le répertoire `saves/`.
 - Paramétrage par fichier `config.json`.
 - Interface texte (TUI) pour suivre l'exploration et gérer l'état.
-- Contrôles pour lancer, stopper, et superviser l'exploration.
+- Envoi de commandes personnalisées au serveur via RCON.
+- Lecture et affichage du chat Minecraft.
+- Envoi de messages dans le chat du jeu.
 
 ## Dépendances
+- Accès complet au serveur Minecraft avec RCON activé.
 - Python 3.8+
 - [mcrcon](https://pypi.org/project/mcrcon/) >= 0.7.0
 - [rich](https://pypi.org/project/rich/) >= 13.7.0
@@ -64,5 +67,4 @@ python main.py
 ```
 
 ## Sauvegardes
-- L’état de l’exploration est sauvegardé automatiquement dans `.mc_spiral_save.json`.
 - Les sauvegardes multiples se trouvent dans `saves/`.
