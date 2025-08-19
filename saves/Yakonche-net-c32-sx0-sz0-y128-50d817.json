@@ -1,0 +1,19 @@
+{
+  "player": "Yakonche",
+  "dimension": "minecraft:the_nether",
+  "y": 128,
+  "chunk_step": 32,
+  "step_blocks": 512,
+  "spawn_x": 0,
+  "spawn_z": 0,
+  "step_index": 1366,
+  "current_x": 8192,
+  "current_z": -9216,
+  "dir_idx": 0,
+  "leg_length": 37,
+  "leg_progress": 34,
+  "interval_s": 60.0,
+  "max_tps": 4096,
+  "host": "localhost",
+  "port": 25575
+}

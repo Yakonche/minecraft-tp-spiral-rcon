@@ -1,0 +1,20 @@
+{
+  "rcon": {
+    "host": "localhost",
+    "port": 25575,
+    "password": "Password",
+    "timeout": 5.0
+  },
+  "exploration": {
+    "player": "Player",
+    "dimension": "minecraft:the_nether",
+    "y": 128,
+    "chunks": 32,
+    "spawn_x": 0,
+    "spawn_z": 0,
+    "interval": 75.0,
+    "max_tps": 4096
+  },
+  "save_file": "auto",
+  "save_dir": "saves"
+}
