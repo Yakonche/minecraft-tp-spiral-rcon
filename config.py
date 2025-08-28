@@ -1,6 +1,6 @@
 import json, os, re, hashlib
 from typing import Any, Dict
-DEFAULT_CONFIG={'rcon':{'host':'localhost','port':25575,'password':'Password,'timeout':5.0},'exploration':{'player':'Player','dimension':'minecraft:overworld','y':192,'chunks':32,'spawn_x':0,'spawn_z':0,'interval':15.0,'max_tps':1000},'save_file':'auto','save_dir':'saves'}
+DEFAULT_CONFIG={'rcon':{'host':'localhost','port':25575,'password':'Password','timeout':5.0},'exploration':{'player':'Player','dimension':'minecraft:overworld','y':192,'chunks':32,'spawn_x':0,'spawn_z':0,'interval':15.0,'max_tps':1000},'save_file':'auto','save_dir':'saves'}
 
 def load_config(path='config.json'):
     if not os.path.isfile(path):
