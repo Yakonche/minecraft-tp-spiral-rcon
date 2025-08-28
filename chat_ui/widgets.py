@@ -28,27 +28,49 @@ def render_dimension(win,y,x,left_w,card_w,dim_raw,cp):
     base=f"│ {'Dimension':{left_w}} │ "
     add_safe(win,y,x,base,curses.color_pair(cp["white"]))
     cx=x+len(base)
-    add_safe(win,y,cx,ns,ns_attr); cx+=len(ns)
-    add_safe(win,y,cx,":",colon_attr); cx+=1
-    add_safe(win,y,cx,name_dim,name_attr)
+    right_w=max(0, card_w - (left_w + 5))
+    remaining=right_w
+    def draw_seg(text, attr):
+        nonlocal cx, remaining
+        if remaining<=0: return
+        t, used = clip_cols(str(text), remaining)
+        if not t: return
+        add_safe(win,y,cx,t,attr)
+        cx += len(t)
+        remaining -= used
+    draw_seg(ns, ns_attr)
+    draw_seg(":", colon_attr)
+    draw_seg(name_dim, name_attr)
 
 def render_position(win,y,x,left_w,card_w,pos_txt,cp):
     base=f"│ {'Position':{left_w}} │ "
     add_safe(win,y,x,base,curses.color_pair(cp["white"]))
     cx=x+len(base)
+    right_w=max(0, card_w - (left_w + 5))
+    remaining=right_w
     m=re.match(r"X=([^ ]+)\s+Y=([^ ]+)\s+Z=([^ ]+)",pos_txt)
     def fmt(v):
         mm=re.match(r"[-+]?\d+(?:\.\d+)?",v)
         return str(int(float(mm.group(0)))) if mm else v
+    def draw_seg(text, attr):
+        nonlocal cx, remaining
+        if remaining<=0: return
+        t, used = clip_cols(str(text), remaining)
+        if not t: return
+        add_safe(win,y,cx,t,attr)
+        cx += len(t)
+        remaining -= used
     if m:
-        add_safe(win,y,cx,"X=",curses.color_pair(cp["yellow_dk"])); cx+=2
-        v=fmt(m.group(1)); add_safe(win,y,cx,v,curses.color_pair(cp["yellow_lt"])); cx+=len(v)
-        add_safe(win,y,cx," Y=",curses.color_pair(cp["yellow_dk"])); cx+=3
-        v=fmt(m.group(2)); add_safe(win,y,cx,v,curses.color_pair(cp["yellow_lt"])); cx+=len(v)
-        add_safe(win,y,cx," Z=",curses.color_pair(cp["yellow_dk"])); cx+=3
-        v=fmt(m.group(3)); add_safe(win,y,cx,v,curses.color_pair(cp["yellow_lt"]))
+        draw_seg('X=', curses.color_pair(cp['yellow_dk']))
+        draw_seg(fmt(m.group(1)), curses.color_pair(cp['yellow_lt']))
+        draw_seg(' Y=', curses.color_pair(cp['yellow_dk']))
+        draw_seg(fmt(m.group(2)), curses.color_pair(cp['yellow_lt']))
+        draw_seg(' Z=', curses.color_pair(cp['yellow_dk']))
+        draw_seg(fmt(m.group(3)), curses.color_pair(cp['yellow_lt']))
     else:
-        add_safe(win,y,cx,pos_txt,curses.color_pair(cp["yellow_lt"]))
+        t,_=clip_cols(pos_txt, remaining)
+        if t:
+            add_safe(win,y,cx,t,curses.color_pair(cp['yellow_lt']))
 
 def wrap_segments(segs,width):
     lines=[[]]; used=0

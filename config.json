@@ -7,7 +7,7 @@
   },
   "exploration": {
     "player": "Player",
-    "dimension": "minecraft:the_nether",
+    "dimension": "minecraft:overworld",
     "y": 128,
     "chunks": 32,
     "spawn_x": 0,

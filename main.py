@@ -142,7 +142,7 @@ def run_exploration(conf, reset=False, dry_run=False):
         return
     try:
         while True:
-            action = run_loop(state, save, rc)  # None | "CONTROL"
+            action = run_loop(state, save, rc)
             if action == "CONTROL":
                 try:
                     run_free_control(conf, rc)
@@ -177,7 +177,7 @@ def menu_once(conf, dry_run):
     console.print("6) Mode simulation — Aucune commande n'est envoyée au serveur")
     console.print("7) Contrôle libre")
     console.print("8) Chat + Commandes RCON")
-    console.print("9) Quitter  (ou [bold]Esc[/bold])")
+    console.print("9) Obtenir IPs d'un serveur")
     console.print("")
     console.print("Appuyez sur [bold]1-9[/bold] pour choisir, ou [bold]Esc[/bold] pour quitter…")
     console.print("")
@@ -223,7 +223,13 @@ def main():
                     run_chat_console(conf, rc)
                 finally:
                     rc.close()
-        elif ch in ("9", "\x1b"):
+        elif ch == "9":
+            try:
+                import mc_resolve as mcr
+                mcr.main()
+            except Exception as e:
+                console.print(f"[red]Erreur mc_resolve : {e}[/red]")
+        elif ch == "\x1b":
             console.print("\n --- PROGRAMME TERMINÉ --- \n")
             break
 

@@ -1,4 +1,4 @@
-import curses, time, threading, queue, textwrap, re, unicodedata, math
+import curses, time, threading, queue, textwrap, re, unicodedata, math, locale
 from chat_logs import LogTail, parse_chat
 from mc_commands import COMMANDS, suggest_commands, STRUCTURES
 from chat_markdown import render_segments
@@ -15,8 +15,10 @@ except Exception:
 
 class TUI:
     def __init__(self, stdscr, conf, rc):
+        locale.setlocale(locale.LC_ALL, '')
         curses.curs_set(0)
         curses.use_default_colors()
+        stdscr.keypad(True)
         self.use_256=curses.COLORS>=256
         self.stats_view = StatsView()
         self.stdscr=stdscr
@@ -38,7 +40,7 @@ class TUI:
         self.stop = threading.Event()
         threading.Thread(target=self._reader_loop, daemon=True).start()
         self.rcon = rc
-        self.rcon_status = "Connecté RCON" if self.rcon else "Erreur RCON : non initialisé"
+        self.rcon_status = "Connecté en RCON" if self.rcon else "Erreur RCON : non initialisé"
         self.dim_map = {}
         self.stats_data = []
         self.stats_interval = 1
@@ -66,8 +68,11 @@ class TUI:
         except Exception:
             m = re.findall(r"[-+]?\d+(?:\.\d+)?", s)
             f = float(m[0]) if m else 0.0
-        full = max(0, min(10, int(round(f / 2.0))))
-        return "♥" * full + "♡" * (10 - full)
+        f = max(0.0, min(20.0, f))
+        halves = int(f + 1e-6)
+        full = halves // 2
+        half = halves % 2
+        return ("❤️" * full) + ("♥" if half else "")
 
     def _set_dims(self, d): self.dim_map=d
 
@@ -125,78 +130,149 @@ class TUI:
         self.stats_view = StatsView()
 
     def loop(self):
+        try:
+            self.stdscr.keypad(True)
+        except Exception:
+            pass
+
         while not self.stop.is_set():
             try:
                 while True:
                     self.chat_lines.append(self.q.get_nowait())
-                    if self.scroll==0: self.needs_render=True
+                    if self.scroll == 0:
+                        self.needs_render = True
                 break
             except queue.Empty:
                 pass
-            c=self.stdscr.getch()
-            if c==curses.KEY_RESIZE:
+
+            try:
+                c = self.stdscr.get_wch()
+            except curses.error:
+                c = -1
+            except Exception:
+                c = -1
+
+            if c == curses.KEY_RESIZE:
                 self._resize()
-            elif c in (27,):
-                if self.mode=="chat":
-                    self.stop.set(); break
+
+            elif c in (27, '\x1b'):  # Esc
+                if self.mode == "chat":
+                    self.stop.set()
+                    break
                 else:
-                    self.mode="chat"; self.search=""; self.needs_render=True
-            elif c==curses.KEY_F5:
+                    self.mode = "chat";
+                    self.search = "";
+                    self.needs_render = True
+
+            elif c == curses.KEY_F5:
                 self.tail.force_refresh()
-            elif c==curses.KEY_F1:
-                if self.mode!="help":
-                    self.mode="help"; self.search=""; self.help_view="cmd"; self.help_scroll=0; self.needs_render=True
+
+            elif c == curses.KEY_F1:
+                if self.mode != "help":
+                    self.mode = "help";
+                    self.search = "";
+                    self.help_view = "cmd";
+                    self.help_scroll = 0;
+                    self.needs_render = True
                 else:
-                    self.help_view=("struct" if self.help_view=="cmd" else "cmd"); self.help_scroll=0; self.needs_render=True
-            elif c==curses.KEY_F2:
-                if self.mode!="stats":
-                    self.mode="stats"; self.needs_render=True
+                    self.help_view = ("struct" if self.help_view == "cmd" else "cmd")
+                    self.help_scroll = 0;
+                    self.needs_render = True
+
+            elif c == curses.KEY_F2:
+                if self.mode != "stats":
+                    self.mode = "stats";
+                    self.needs_render = True
                 else:
-                    self.mode="chat"; self.needs_render=True
-            elif c in (curses.KEY_UP,curses.KEY_PPAGE):
-                if self.mode=="help":
-                    self.help_scroll=max(0,self.help_scroll-1); self.needs_render=True
+                    self.mode = "chat";
+                    self.needs_render = True
+
+            elif c in (curses.KEY_UP, curses.KEY_PPAGE):
+                if self.mode == "help":
+                    self.help_scroll = max(0, self.help_scroll - 1);
+                    self.needs_render = True
                 else:
-                    self.scroll=min(self.scroll+1,max(0,len(self.chat_lines)-1)); self.needs_render=True
-            elif c in (curses.KEY_DOWN,curses.KEY_NPAGE):
-                if self.mode=="help":
-                    self.help_scroll=self.help_scroll+1; self.needs_render=True
+                    self.scroll = min(self.scroll + 1, max(0, len(self.chat_lines) - 1));
+                    self.needs_render = True
+
+            elif c in (curses.KEY_DOWN, curses.KEY_NPAGE):
+                if self.mode == "help":
+                    self.help_scroll = self.help_scroll + 1;
+                    self.needs_render = True
                 else:
-                    self.scroll=max(0,self.scroll-1); self.needs_render=True
-            elif self.mode=="help":
-                if c in (curses.KEY_BACKSPACE,127,8):
-                    if self.search: self.search=self.search[:-1]; self.help_scroll=0; self.needs_render=True
-                elif 32<=c<=126:
-                    self.search+=chr(c); self.help_scroll=0; self.needs_render=True
-            elif c==9:
+                    self.scroll = max(0, self.scroll - 1);
+                    self.needs_render = True
+
+            elif self.mode == "help":
+                if isinstance(c, str):
+                    if c in ('\b', '\x7f'):
+                        if self.search:
+                            self.search = self.search[:-1];
+                            self.help_scroll = 0;
+                            self.needs_render = True
+                    elif c.isprintable():
+                        self.search += c;
+                        self.help_scroll = 0;
+                        self.needs_render = True
+                else:
+                    if c in (curses.KEY_BACKSPACE, 127, 8):
+                        if self.search:
+                            self.search = self.search[:-1];
+                            self.help_scroll = 0;
+                            self.needs_render = True
+
+            elif c in (9, '\t'):
                 if self.input_buf:
-                    sug=suggest_commands(self.input_buf)
-                    if sug: self.input_buf=sug[0]; self.needs_render=True
-            elif c in (10,13):
+                    sug = suggest_commands(self.input_buf)
+                    if sug:
+                        self.input_buf = sug[0];
+                        self.needs_render = True
+
+            elif c in (10, 13, '\n'):  # Enter
                 if self.input_buf.strip():
-                    cmd=self.input_buf.strip()
+                    cmd = self.input_buf.strip()
                     if self.rcon:
                         try:
-                            resp=self.rcon.cmd(cmd)
+                            resp = self.rcon.cmd(cmd)
                             if resp:
-                                now=time.strftime("%H:%M:%S")
-                                self.chat_lines.append((now,"RCON",resp.replace("\r\n"," "),"rcon_say"))
-                                if self.scroll==0: self.needs_render=True
+                                now = time.strftime("%H:%M:%S")
+                                self.chat_lines.append((now, "RCON", resp.replace("\r\n", " "), "rcon_say"))
+                                if self.scroll == 0:
+                                    self.needs_render = True
                         except Exception as e:
-                            self.rcon_status=f"Erreur RCON : {e}"; self.needs_render=True
-                    self.input_buf=""; self.needs_render=True
-            elif c!=-1:
-                if c in (curses.KEY_BACKSPACE,127,8):
-                    if self.input_buf: self.input_buf=self.input_buf[:-1]; self.needs_render=True
-                elif 32<=c<=126:
-                    self.input_buf+=chr(c); self.needs_render=True
-            now=time.time()
-            if now-self.last_blink>=0.5:
-                self.cursor_visible=not self.cursor_visible
-                self.search_cursor_visible=not self.search_cursor_visible
-                self.last_blink=now; self.needs_render=True
+                            self.rcon_status = f"Erreur RCON : {e}";
+                            self.needs_render = True
+                    self.input_buf = "";
+                    self.needs_render = True
+
+            elif c != -1:
+                if isinstance(c, str):
+                    if c in ('\b', '\x7f'):
+                        if self.input_buf:
+                            self.input_buf = self.input_buf[:-1];
+                            self.needs_render = True
+                    elif c.isprintable():
+                        self.input_buf += c;
+                        self.needs_render = True
+                else:
+                    if c in (curses.KEY_BACKSPACE, 127, 8):
+                        if self.input_buf:
+                            self.input_buf = self.input_buf[:-1];
+                            self.needs_render = True
+                    elif 32 <= c <= 126:
+                        self.input_buf += chr(c);
+                        self.needs_render = True
+
+            now = time.time()
+            if now - self.last_blink >= 0.5:
+                self.cursor_visible = not self.cursor_visible
+                self.search_cursor_visible = not self.search_cursor_visible
+                self.last_blink = now;
+                self.needs_render = True
+
             if self.needs_render:
-                self._render(); self.needs_render=False
+                self._render()
+                self.needs_render = False
 
     def _render(self):
         self._render_chat()
@@ -208,14 +284,23 @@ class TUI:
     def _render_chat(self):
         win=self.chat_win
         H,W=win.getmaxyx()
-        box(win,"Chat (logs)",self.cp["white"],self.cp["cyan"])
+        box(win, "Chat", self.cp["white"], self.cp["cyan"])
         inner_h=H-2; x=1
         lines=self.chat_lines
         visible=lines[max(0,len(lines)-inner_h-self.scroll):len(lines)-self.scroll]
         y=H-2; inner_w=W-2
         for ts,speaker,msg,kind in reversed(visible):
             name_color=self._name_color(speaker,kind)
-            segs=[(msg,curses.color_pair(self.cp["yellow"]))] if kind in ("event_join","event_leave") else render_segments(msg)
+            segs = None
+            if kind in ("event_join", "event_leave"):
+                m = re.match(r"^([A-Za-z0-9_]{1,16}) (joined the game|left the game)$", msg)
+                if m:
+                    who, tail = m.group(1), m.group(2)
+                    name_color = self._name_color(who, "player")
+                    segs = [(who, curses.color_pair(name_color)),
+                            (" " + tail, curses.color_pair(self.cp["yellow_dk"]))]
+            if segs is None:
+                segs = render_segments(msg)
             start_cx=x+(7+len(ts)+len(speaker) if speaker else 4+len(ts))
             max_width=max(1,inner_w-(start_cx-x))
             wrapped=wrap_segments(segs,max_width) or [[]]
@@ -246,7 +331,7 @@ class TUI:
         self.cmd_win=curses.newwin(bot_h,W,H-bot_h,0)
         self.chat_win=curses.newwin(H-bot_h,W,0,0)
         win=self.cmd_win
-        box(win,"Commande libre",self.cp["white"],self.cp["cyan"])
+        box(win,"Commandes", self.cp["white"], self.cp["cyan"])
         add_safe(win,1,1," "+self.rcon_status,curses.color_pair(self.cp["green"] if self.rcon and not self.rcon_status.startswith("Erreur") else self.cp["gray"]))
         add_safe(win,2,1," Commandes : ",curses.color_pair(self.cp["gray"]))
         sx=1+len(" Commandes : ")
@@ -362,8 +447,9 @@ class TUI:
 
     def _name_color(self,speaker,kind):
         if speaker=="RCON" or kind=="rcon_say": return self.cp["orange"]
-        dn=self.dim_map.get(speaker,"unknown")
-        if dn=="overworld": return self.cp["green"]
-        if dn in ("the_nether","nether"): return self.cp["red"]
-        if dn in ("the_end","end"): return self.cp["magenta"]
+        dn = str(self.dim_map.get(speaker, "unknown")).strip('"')
+        if ":" in dn: dn = dn.split(":", 1)[1]
+        if dn == "overworld": return self.cp["green"]
+        if dn in ("the_nether", "nether"): return self.cp["red"]
+        if dn in ("the_end", "end"): return self.cp["magenta"]
         return self.cp["white"]

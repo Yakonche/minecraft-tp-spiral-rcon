@@ -63,10 +63,10 @@ def poll_stats(stop_event, nbt_py, playerdata_dir, usernamecache, interval_s, se
                     cur = {"name": m.group(1).strip()}
                     continue
                 if cur is None: continue
-                m = re.match(r"^\s*Santé\s*:\s*([^\(]+)\(", ln)
-                if m: cur["health"] = m.group(1).strip()
-                m = re.match(r"^\s*Faim\s*:\s*([^\(]+)\(", ln)
-                if m: cur["hunger"] = m.group(1).strip()
+                m = re.match(r"^\s*Santé\s*:\s*[^(]*\(([-+]?\d+(?:\.\d+)?)\)", ln)
+                if m: cur["health"] = m.group(1)
+                m = re.match(r"^\s*Faim\s*:\s*[^(]*\(([-+]?\d+(?:\.\d+)?)\)", ln)
+                if m: cur["hunger"] = m.group(1)
                 m = re.match(r"^\s*XP\s*:\s*niveau\s*(\d+)", ln)
                 if m: cur["lvl"] = m.group(1)
                 m = re.match(r"^\s*Score\s*:\s*(\d+)", ln)
