@@ -65,10 +65,6 @@ Activer l'environnement virtuel, puis exécuter :
 ```bash
 python main.py
 ```
-Ou juste :
-```bash
-.venv/bin/python main.py
-```
 
 ## Sauvegardes
 - Les sauvegardes multiples se trouvent dans `saves/`.

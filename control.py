@@ -1,4 +1,3 @@
-# control.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os, sys, time, select, termios, tty, shutil, glob, re
@@ -133,7 +132,7 @@ def _log_panel(rows, width):
         left_w_measured = max(left_w_measured, lt.cell_len)
     left_area = max(LEFT_MIN_WIDTH, left_w_measured, _left_width)
     cols_total = width
-    right_area = cols_total - left_area - 7
+    right_area = max(20, cols_total - left_area - 7)
     _left_width = left_area
     lines = [ _top_border("Historique TPs", width) ]
     for lt, rt in zip(left_texts, right_texts):
@@ -201,7 +200,6 @@ def _normalize_dim(s: str) -> str:
     if ":" not in s and s: return f"minecraft:{s}"
     return s
 
-
 def _read_dim_key(timeout=0.25):
     r, _, _ = select.select([sys.stdin], [], [], timeout)
     if not r: return None
@@ -209,7 +207,6 @@ def _read_dim_key(timeout=0.25):
     if ch != "\x1b":
         return ch
     seq = ""
-    # read ahead to detect bracketed paste start: ESC [ 200 ~
     end = time.time() + 0.1
     while time.time() < end:
         r, _, _ = select.select([sys.stdin], [], [], max(0, end - time.time()))
@@ -217,7 +214,6 @@ def _read_dim_key(timeout=0.25):
         seq += os.read(sys.stdin.fileno(), 1).decode(errors="ignore")
         if len(seq) >= 5: break
     if seq.startswith("[200~"):
-        # collect until ESC[201~
         buf = []
         while True:
             r, _, _ = select.select([sys.stdin], [], [], 1.0)
@@ -225,7 +221,6 @@ def _read_dim_key(timeout=0.25):
             ch2 = os.read(sys.stdin.fileno(), 1).decode(errors="ignore")
             if ch2 == "\x1b":
                 tail = ""
-                # check for [201~
                 r2, _, _ = select.select([sys.stdin], [], [], 0.05)
                 if r2:
                     tail += os.read(sys.stdin.fileno(), 1).decode(errors="ignore")
@@ -244,11 +239,11 @@ def _read_dim_key(timeout=0.25):
             else:
                 buf.append(ch2)
         return "".join(buf)
-    # arrows or plain ESC fall back
     if seq.startswith("["):
         m = seq[1:2]
         return {"A":"UP","B":"DOWN","C":"RIGHT","D":"LEFT"}.get(m,"ESC")
     return "ESC"
+
 def _prompt_dimension(live, width, current_dim: str) -> str | None:
     buf = []
     while True:
@@ -256,25 +251,20 @@ def _prompt_dimension(live, width, current_dim: str) -> str | None:
         line1 = Text.assemble(("Saisir une dimension (Entrée ou Esc pour choisir la dimension actuelle / Annuler) :", "dim"))
         line2 = Text.assemble(("> ", "bold"), ("".join(buf), "white"), (blink, "white"))
         panel = Panel(Group(line1, line2), title="Changer de dimension", box=ROUNDED, width=max(60, min(width, 100)))
-        live.update(Group(panel))
+        live.update(Group(panel)); live.refresh()
         k = _read_dim_key(timeout=0.25)
-        if not k:
-            continue
-        if k == "ESC":
-            return None
+        if not k: continue
+        if k == "ESC": return None
         if k in ("\n", "\r"):
             s = "".join(buf).strip()
-            if not s:
-                return None
+            if not s: return None
             return s
         if k in ("\x7f", "\b"):
-            if buf:
-                buf.pop()
+            if buf: buf.pop()
             continue
         if isinstance(k, str) and len(k) > 1 and k not in ("UP","DOWN","LEFT","RIGHT","ESC"):
-            buf.extend(list(k))
-            continue
-        if len(k) == 1 and (k.isalnum() or k in ":_-/." ):
+            buf.extend(list(k)); continue
+        if len(k) == 1 and (k.isalnum() or k in ":_-/."):
             buf.append(k)
 
 def _coords_left(x, y, z):
@@ -288,6 +278,38 @@ def _coords_right_ok(x, y, z):
 def _coords_right_err(x, y, z):
     sx, sy, sz = map(_fmt_num, (x,y,z)); _upd_right_widths(sx,sy,sz)
     return f"[magenta]X=[/magenta][red]{sx.ljust(_wxR)}[/red]  [magenta]Y=[/magenta][red]{sy.ljust(_wyR)}[/red] [magenta]Z=[/magenta][red]{sz.ljust(_wzR)}[/red]"
+
+def _load_from_current_player(conf: dict):
+    e = conf.get("exploration", {})
+    player = e.get("player", "Yakonche")
+    usernamecache = conf.get("usernamecache", "/srv/minecraft/usernamecache.json")
+    playerdata_dir = conf.get("playerdata_dir", "/srv/minecraft/world/playerdata")
+    try:
+        import nbt as nbtmod
+    except Exception as ex:
+        raise RuntimeError(f"import nbt.py impossible : {ex}")
+    names = nbtmod.load_usernames(usernamecache)
+    uuid = None
+    for k, v in names.items():
+        if v == player:
+            uuid = k
+            break
+    if not uuid:
+        raise RuntimeError(f"UUID introuvable pour {player} dans {usernamecache}")
+    fp = os.path.join(playerdata_dir, f"{uuid}.dat")
+    if not os.path.isfile(fp):
+        raise RuntimeError(f"playerdata introuvable: {fp}")
+    pdata = nbtmod.read_file(fp)
+    dim = _normalize_dim(str(pdata.get("Dimension", "minecraft:overworld")))
+    pos = pdata.get("Pos", [0, 192, 0])
+    try:
+        if hasattr(pos, "tolist"):
+            pos = pos.tolist()
+        x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
+    except Exception:
+        x, y, z = 0.0, 192.0, 0.0
+    return dim, x, y, z
+
 def run_free_control(conf: dict, rcon) -> None:
     e = conf.get("exploration", {})
     player = e.get("player", "Yakonche")
@@ -301,15 +323,16 @@ def run_free_control(conf: dict, rcon) -> None:
     print("\nContrôle libre — choisissez le point de départ :")
     print("1) Spawn")
     print("2) Charger depuis la sauvegarde")
-    print("3) Quitter (Esc)\n")
+    print("3) Charger depuis la position actuelle du joueur")
+    print("4) Quitter (Esc)\n")
 
     choice = None
     with RawInput(sys.stdin):
         while True:
             k = _read_key(timeout=0.5)
             if not k: continue
-            if k in "123": choice = k; break
-            if k == "ESC": choice = "3"; break
+            if k in "1234": choice = k; break
+            if k == "ESC": choice = "4"; break
 
     if choice == "2":
         try:
@@ -327,6 +350,14 @@ def run_free_control(conf: dict, rcon) -> None:
             print(f"[yellow]Impossible de charger la sauvegarde : {e}[/yellow]")
 
     if choice == "3":
+        try:
+            dim2, x2, y2, z2 = _load_from_current_player(conf)
+            dim = dim2
+            x, y, z = x2, int(y2), z2
+        except Exception as e:
+            print(f"[yellow]Lecture NBT impossible, utilisation du spawn : {e}[/yellow]")
+
+    if choice == "4":
         return
 
     cols = shutil.get_terminal_size((120, 40)).columns
@@ -339,7 +370,7 @@ def run_free_control(conf: dict, rcon) -> None:
         nonlocal last_sent, tp_count
         tdim2 = _normalize_dim(tdim)
         target = (tdim2, tx, ty, tz)
-        if target == last_sent: return
+        if target == last_sent: return False
         try:
             resp = rcon.cmd(f"execute in {tdim2} run tp {player} {tx} {ty} {tz}")
         except Exception as e:
@@ -356,24 +387,35 @@ def run_free_control(conf: dict, rcon) -> None:
                 logs.append((left, right))
                 logs.append(("", f"[red]{resp}[/red]"))
                 last_sent = target
-                return
+                return True
         else:
             right = f"[white]Teleported {player} to[/white] {_coords_right_ok(tx,ty,tz)}"
         logs.append((left, right))
         last_sent = target
+        return True
 
-    with Live(refresh_per_second=20, screen=False) as live, RawInput(sys.stdin):
-        send_tp(x, y, z, dim)
+    with Live(auto_refresh=False, screen=False) as live, RawInput(sys.stdin):
+        dirty = True
+        send_tp(x, y, z, dim); dirty = True
+        last_cols = cols
         while True:
-            log_block = _log_panel(list(logs), width)
-            ctrl_panel = _ui(player, dim, x, y, z, step_chunks, tp_count, max(90, min(120, int(width*0.8))))
-            live.update(Group(log_block, Align.center(ctrl_panel)))
+            if dirty:
+                log_block = _log_panel(list(logs), width)
+                ctrl_panel = _ui(player, dim, x, y, z, step_chunks, tp_count, max(90, min(120, int(width*0.8))))
+                live.update(Group(log_block, Align.center(ctrl_panel))); live.refresh()
+                dirty = False
 
             start = time.time()
             moved = False
             while time.time() - start < 0.8:
                 k = _read_key(timeout=0.1)
-                if not k: continue
+                if not k:
+                    new_cols = shutil.get_terminal_size((120, 40)).columns
+                    if new_cols != last_cols:
+                        last_cols = new_cols
+                        width = min(max(110, int(new_cols * 0.95)), max(120, new_cols - 2), 240)
+                        dirty = True
+                    continue
                 if k == "RIGHT" or k.lower() == "d":
                     x += step_chunks*16; tp_count += 1; moved = True; break
                 if k == "LEFT" or k.lower() == "q":
@@ -387,19 +429,22 @@ def run_free_control(conf: dict, rcon) -> None:
                 if k.lower() == "e":
                     y -= 16; tp_count += 1; moved = True; break
                 if k == "+":
-                    step_chunks = max(1, step_chunks*2); break
+                    step_chunks = max(1, step_chunks*2); dirty = True; break
                 if k == "-":
-                    step_chunks = max(1, step_chunks//2 or 1); break
+                    step_chunks = max(1, step_chunks//2 or 1); dirty = True; break
                 if k.lower() == "r":
                     x, z = x0, z0; moved = True; break
                 if k.lower() == "i":
+                    panel = Panel(Text(""), title="Changer de dimension", box=ROUNDED, width=max(60, min(width, 100)))
+                    live.update(Group(panel)); live.refresh()
                     new_dim = _prompt_dimension(live, width, dim)
                     if new_dim:
                         dim = _normalize_dim(new_dim)
                         tp_count += 1
-                        send_tp(x, y, z, dim)
+                        if send_tp(x, y, z, dim): dirty = True
+                    dirty = True
                     break
                 if k == "ESC":
                     return
             if moved:
-                send_tp(x, y, z, dim)
+                if send_tp(x, y, z, dim): dirty = True

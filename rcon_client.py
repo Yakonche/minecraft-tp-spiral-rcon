@@ -18,7 +18,6 @@ class RconClient:
             return
         if MCRcon is None:
             raise RuntimeError("Le module 'mcrcon' est introuvable. Installez-le avec: pip install mcrcon")
-        # Certaines versions de mcrcon ne gèrent pas 'timeout' correctement -> n'utiliser que host/password/port
         self.conn = MCRcon(self.host, self.password, port=self.port)
         self.conn.connect()
 

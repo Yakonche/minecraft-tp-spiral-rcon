@@ -1,4 +1,3 @@
-# main.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import annotations
@@ -48,7 +47,7 @@ def show_config(conf):
     t.add_row("Joueur", e['player']); t.add_row("Dimension", e['dimension'])
     t.add_row("Hauteur (Y=)", str(e['y'])); t.add_row("Chunks", str(e['chunks']))
     t.add_row("Spawn (X)", str(e['spawn_x'])); t.add_row("Spawn (Z)", str(e['spawn_z']))
-    t.add_row("Intervalle", str(e['interval'])); t.add_row("/tp max", str(e['max_tps']))
+    t.add_row("Intervalle (s)", str(e['interval'])); t.add_row("/tp max", str(e['max_tps']))
     console.print(t)
 
 def edit_config(conf) -> dict:
@@ -177,7 +176,7 @@ def menu_once(conf, dry_run):
     console.print("5) Tester la connexion RCON")
     console.print("6) Mode simulation — Aucune commande n'est envoyée au serveur")
     console.print("7) Contrôle libre")
-    console.print("8) Commande libre + Chat")
+    console.print("8) Chat + Commandes RCON")
     console.print("9) Quitter  (ou [bold]Esc[/bold])")
     console.print("")
     console.print("Appuyez sur [bold]1-9[/bold] pour choisir, ou [bold]Esc[/bold] pour quitter…")

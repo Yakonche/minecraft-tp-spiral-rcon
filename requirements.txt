@@ -1,2 +1,4 @@
 mcrcon>=0.7.0
 rich>=13.7.0
+textual>=0.48
+nbtlib>=2.0

@@ -65,10 +65,6 @@ Activate the virtual environment, then run:
 ```bash
 python main.py
 ```
-Or just:
-```bash
-.venv/bin/python main.py
-```
 
 ## Saves
 - Multiple save states are stored in `saves/`.

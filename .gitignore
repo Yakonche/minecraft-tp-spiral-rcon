@@ -1,0 +1,8 @@
+__pycache__/
+.venv/
+saves/
+.mc_spiral_save.json
+*.pyc
+*.pyo
+*.pyd
+*.log

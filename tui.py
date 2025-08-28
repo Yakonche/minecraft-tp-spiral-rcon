@@ -199,13 +199,17 @@ def _coords_error_pad_right(x, y, z) -> str:
 
 def _build_right_segment(resp: str, player: str, cmd_x: int, cmd_y: int, cmd_z: int) -> str:
     if resp and resp.startswith("[DRY-RUN]"):
-        return f"[white]Teleported {player} to[/white] {_coords_error_pad_right(cmd_x, cmd_y, cmd_z)} [yellow](simulation)[/yellow]"
+        return (
+            f"[white]Teleported {player} to[/white] "
+            f"{_coords_error_pad_right(cmd_x, cmd_y, cmd_z)} [yellow](simulation)[/yellow]"
+        )
     m = _TELEPORTED_RE.match((resp or "").strip())
     if m:
         rx, ry, rz = (m.group(1), m.group(2), m.group(3))
         return f"[white]Teleported {player} to[/white] {_coords_dual_pad_right(rx, ry, rz)}"
-    extra = f" [red dim]{resp}[/red dim]" if resp else ""
+    extra = f"\n[red]{resp}[/red]" if resp else ""
     return f"[white]Teleported {player} to[/white] {_coords_error_pad_right(cmd_x, cmd_y, cmd_z)}{extra}"
+
 
 def _fmt_ts_markup() -> str:
     h, m, s = time.strftime("%H:%M:%S").split(":")
