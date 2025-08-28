@@ -12,7 +12,7 @@
     "chunks": 32,
     "spawn_x": 0,
     "spawn_z": 0,
-    "interval": 75.0,
+    "interval": 60.0,
     "max_tps": 4096
   },
   "save_file": "auto",
