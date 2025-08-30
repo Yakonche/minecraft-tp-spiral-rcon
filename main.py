@@ -1,23 +1,29 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 from __future__ import annotations
-import sys, os, termios, tty, select
-from rich import print
-from rich.prompt import Prompt, IntPrompt, FloatPrompt
-from rich.table import Table
-from rich.panel import Panel
-from rich.console import Console
-from rich.box import ROUNDED
 
-from config import load_config, save_config, compute_save_path
-from state import SpiralState, SaveManager
-from rcon_client import RconClient
-from tui import run_loop
-from spiral import rebuild_state_from_steps
-from control import run_free_control
+import os
+import select
+import sys
+import termios
+import tty
+
+from rich.box import ROUNDED
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import IntPrompt
+from rich.table import Table
+
 from chat import run_chat_console
+from config import compute_save_path, load_config, save_config
+from config_menu import edit_config
+from control import run_free_control
+from rcon_client import RconClient
+from spiral import rebuild_state_from_steps
+from state import SaveManager, SpiralState
+from tui import run_loop
 
 console = Console()
+
 
 def read_key(allowed: set[str] | None = None, timeout: float | None = None) -> str:
     fd = sys.stdin.fileno()
@@ -34,6 +40,7 @@ def read_key(allowed: set[str] | None = None, timeout: float | None = None) -> s
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
+
 def read_key_ext(timeout: float | None = None) -> str:
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
@@ -42,7 +49,7 @@ def read_key_ext(timeout: float | None = None) -> str:
         while True:
             r, _, _ = select.select([sys.stdin], [], [], timeout)
             if not r:
-                continue
+                return None
             b = os.read(fd, 1)
             if b == b"\x1b":
                 r2, _, _ = select.select([sys.stdin], [], [], 0.02)
@@ -66,129 +73,62 @@ def read_key_ext(timeout: float | None = None) -> str:
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
+
 def banner():
-    console.print(Panel.fit("[bold cyan]RCON Spiral Explorer[/bold cyan] — Exploration automatique en spirale carrée", box=ROUNDED))
+    console.print(
+        Panel.fit(
+            "[bold cyan]RCON Spiral Explorer[/bold cyan] — Exploration automatique en spirale carrée", box=ROUNDED
+        )
+    )
+
 
 def show_config(conf):
     t = Table(title="Configuration", show_lines=False, show_header=False, box=ROUNDED)
-    t.add_column(justify="left"); t.add_column(justify="right")
-    t.add_row("RCON host", str(conf['rcon']['host']))
-    t.add_row("RCON port", str(conf['rcon']['port']))
-    t.add_row("RCON timeout (s)", str(conf['rcon']['timeout']))
-    e = conf['exploration']
-    t.add_row("Joueur", e['player']); t.add_row("Dimension", e['dimension'])
-    t.add_row("Hauteur (Y=)", str(e['y'])); t.add_row("Chunks", str(e['chunks']))
-    t.add_row("Spawn (X)", str(e['spawn_x'])); t.add_row("Spawn (Z)", str(e['spawn_z']))
-    t.add_row("Intervalle (s)", str(e['interval'])); t.add_row("/tp max", str(e['max_tps']))
+    t.add_column(justify="left")
+    t.add_column(justify="right")
+    t.add_row("RCON host", str(conf["rcon"]["host"]))
+    t.add_row("RCON port", str(conf["rcon"]["port"]))
+    t.add_row("RCON timeout (s)", str(conf["rcon"]["timeout"]))
+    e = conf["exploration"]
+    t.add_row("Joueur", e["player"])
+    t.add_row("Dimension", e["dimension"])
+    t.add_row("Hauteur (Y=)", str(e["y"]))
+    t.add_row("Chunks", str(e["chunks"]))
+    t.add_row("Spawn (X)", str(e["spawn_x"]))
+    t.add_row("Spawn (Z)", str(e["spawn_z"]))
+    t.add_row("Intervalle (s)", str(e["interval"]))
+    t.add_row("/tp max", str(e["max_tps"]))
+    t.add_row("Dossier playerdata", str(conf.get("nbt", {}).get("playerdata", "/srv/minecraft/world/playerdata")))
+    t.add_row("usernamecache.json", str(conf.get("nbt", {}).get("usernamecache", "/srv/minecraft/usernamecache.json")))
     console.print(t)
 
-def edit_config(conf) -> dict | None:
-    fields = [
-        ("RCON host", ("rcon", "host"), "str"),
-        ("RCON port", ("rcon", "port"), "int"),
-        ("RCON timeout (s)", ("rcon", "timeout"), "float"),
-        ("RCON password", ("rcon", "password"), "str"),
-        ("Joueur", ("exploration", "player"), "str"),
-        ("Dimension", ("exploration", "dimension"), "str"),
-        ("Hauteur (Y=)", ("exploration", "y"), "int"),
-        ("Chunks", ("exploration", "chunks"), "int"),
-        ("Spawn (X)", ("exploration", "spawn_x"), "int"),
-        ("Spawn (Z)", ("exploration", "spawn_z"), "int"),
-        ("Intervalle (s)", ("exploration", "interval"), "float"),
-        ("/tp max (-1 = illimité)", ("exploration", "max_tps"), "int"),
-        ("Fichier de sauvegarde", ("save_file",), "str"),
-        ("Dossier de sauvegarde", ("save_dir",), "str"),
-    ]
-    def getv(c, path):
-        cur = c
-        for k in path:
-            cur = cur[k]
-        return cur
-    def setv(c, path, val):
-        cur = c
-        for k in path[:-1]:
-            cur = cur[k]
-        cur[path[-1]] = val
-    conf2 = {
-        "rcon": dict(conf["rcon"]),
-        "exploration": dict(conf["exploration"]),
-        "save_file": conf.get("save_file","auto"),
-        "save_dir": conf.get("save_dir","saves"),
-    }
-    sel = 0
-    while True:
-        console.clear()
-        console.print(Panel.fit("Modifier la configuration", box=ROUNDED))
-        labels = [f"{name} :" for name, _, _ in fields]
-        w = max(len(s) for s in labels)
-        for i,(name,path,_) in enumerate(fields):
-            prefix = "➤ " if i == sel else "  "
-            lb = f"{name} :".ljust(w)
-            val = str(getv(conf2, path))
-            if i == sel:
-                console.print(f"{prefix}[yellow]{lb}[/] [green]{val}[/]")
-            else:
-                console.print(f"{prefix}[cyan]{lb}[/] [white]{val}[/]")
-        console.print("")
-        console.print(
-            "[yellow]↑/↓[/][grey50] : [/][cyan]Naviguer[/]   [yellow]→[/][grey50] : [/][cyan]Modifier[/]   [yellow]←[/][grey50] : [/][cyan]Retour[/]   [yellow]Entrée[/][grey50] : [/][cyan]Enregistrer[/]   [yellow]Échap[/][grey50] : [/][cyan]Annuler[/]\n")
-        k = read_key_ext()
-        if k == "UP":
-            sel = (sel - 1) % len(fields)
-            continue
-        if k == "DOWN":
-            sel = (sel + 1) % len(fields)
-            continue
-        if k == "LEFT":
-            continue
-        if k == "RIGHT":
-            console.clear()
-            console.print(Panel.fit("Modifier la configuration", box=ROUNDED))
-            for i,(name,path,_) in enumerate(fields):
-                prefix = "➤ " if i == sel else "  "
-                lb = f"{name}:".ljust(w)
-                val = str(getv(conf2, path))
-                if i == sel:
-                    console.print(f"{prefix}[yellow]{lb}[/] [green]{val}[/]")
-                else:
-                    console.print(f"{prefix}[cyan]{lb}[/] [white]{val}[/]")
-            console.print("")
-            name,path,typ = fields[sel]
-            if typ == "int":
-                newv = IntPrompt.ask(name.strip(), default=int(getv(conf2, path)))
-            elif typ == "float":
-                newv = FloatPrompt.ask(name.strip(), default=float(getv(conf2, path)))
-            else:
-                if path == ("rcon","password"):
-                    newv = Prompt.ask(name.strip(), default=str(getv(conf2, path)), password=False)
-                else:
-                    newv = Prompt.ask(name.strip(), default=str(getv(conf2, path)))
-            setv(conf2, path, newv)
-            continue
-        if k == "ENTER":
-            return conf2
-        if k == "ESC":
-            return None
 
 def build_state(conf) -> SpiralState:
-    e = conf['exploration']
+    e = conf["exploration"]
     return SpiralState(
-        player=e['player'], dimension=e['dimension'], y=int(e['y']),
-        chunk_step=int(e['chunks']), step_blocks=int(e['chunks']) * 16,
-        spawn_x=int(e['spawn_x']), spawn_z=int(e['spawn_z']),
-        current_x=int(e['spawn_x']), current_z=int(e['spawn_z']),
-        interval_s=float(e['interval']),
-        max_tps=(None if int(e['max_tps']) == -1 else int(e['max_tps'])),
-        host=str(conf['rcon']['host']), port=int(conf['rcon']['port'])
+        player=e["player"],
+        dimension=e["dimension"],
+        y=int(e["y"]),
+        chunk_step=int(e["chunks"]),
+        step_blocks=int(e["chunks"]) * 16,
+        spawn_x=int(e["spawn_x"]),
+        spawn_z=int(e["spawn_z"]),
+        current_x=int(e["spawn_x"]),
+        current_z=int(e["spawn_z"]),
+        interval_s=float(e["interval"]),
+        max_tps=(None if int(e["max_tps"]) == -1 else int(e["max_tps"])),
+        host=str(conf["rcon"]["host"]),
+        port=int(conf["rcon"]["port"]),
     )
+
 
 def connect_rcon(conf, dry_run=False):
     rc = RconClient(
-        host=str(conf['rcon']['host']),
-        port=int(conf['rcon']['port']),
-        password=str(conf['rcon']['password']),
-        timeout=float(conf['rcon']['timeout']),
-        dry_run=dry_run
+        host=str(conf["rcon"]["host"]),
+        port=int(conf["rcon"]["port"]),
+        password=str(conf["rcon"]["password"]),
+        timeout=float(conf["rcon"]["timeout"]),
+        dry_run=dry_run,
     )
     if dry_run:
         console.print("[yellow]Mode simulation activé (aucune commande n'est envoyée au serveur)[/yellow]\n")
@@ -218,6 +158,7 @@ def connect_rcon(conf, dry_run=False):
 
     console.print("[green]Connexion RCON OK[/green]\n")
     return rc
+
 
 def run_exploration(conf, reset=False, dry_run=False):
     state = build_state(conf)
@@ -249,6 +190,7 @@ def run_exploration(conf, reset=False, dry_run=False):
     finally:
         rc.close()
 
+
 def rebuild_save(conf):
     n = IntPrompt.ask("Nombre de TP déjà effectués ?", default=0)
     base = build_state(conf)
@@ -259,13 +201,14 @@ def rebuild_save(conf):
     console.print(f"[green]Sauvegarde reconstruite[/green] comme si {n} /tp avaient été effectués.")
     console.print(f"Position attendue : X={rebuilt.current_x} Y={rebuilt.y} Z={rebuilt.current_z}")
 
+
 def menu_once(conf, dry_run):
     sel = 0
     opts = [
         "Démarrer / Reprendre (automatique depuis la sauvegarde si existante)",
         "Démarrer à zéro (ignorer la sauvegarde)",
         "Reconstruire une sauvegarde (comme si N TP avaient été faits)",
-        "Modifier la configuration et enregistrer",
+        "Modifier la configuration",
         "Tester la connexion RCON",
         "Mode simulation — Aucune commande n'est envoyée au serveur",
         "Contrôle libre",
@@ -278,7 +221,7 @@ def menu_once(conf, dry_run):
         console.print("\nMenu :")
         for i, text in enumerate(opts):
             pref = "➤ " if i == sel else "  "
-            n = str(i+1)
+            n = str(i + 1)
             if i == sel:
                 console.print(f"{pref}[orange1][{n}][/orange1] [green]{text}[/]")
             else:
@@ -297,12 +240,13 @@ def menu_once(conf, dry_run):
             console.print(f"Choix : {ch}\n")
             return ch
         if k == "ENTER":
-            ch = str(sel+1)
+            ch = str(sel + 1)
             console.print(f"Choix : {ch}\n")
             return ch
         if k == "ESC":
             console.print("Choix : Esc\n")
             return "\x1b"
+
 
 def main():
     console.print("")
@@ -318,14 +262,15 @@ def main():
         elif ch == "3":
             rebuild_save(conf)
         elif ch == "4":
-            new_conf = edit_config(conf)
+            new_conf = edit_config(conf, console, read_key_ext)
             if new_conf is not None:
                 conf = new_conf
                 save_config(conf, "config.json")
                 console.print("\n[green]Configuration enregistrée[/green]\n")
         elif ch == "5":
             rc = connect_rcon(conf, dry_run=dry_run)
-            if rc: rc.close()
+            if rc:
+                rc.close()
         elif ch == "6":
             dry_run = not dry_run
             console.print(f"Mode simulation = {'ON' if dry_run else 'OFF'}\n")
@@ -346,12 +291,14 @@ def main():
         elif ch == "9":
             try:
                 import mc_resolve as mcr
+
                 mcr.main()
             except Exception as e:
                 console.print(f"[red]Erreur mc_resolve : {e}[/red]")
         elif ch == "\x1b":
             console.print("\n --- PROGRAMME TERMINÉ --- \n")
             break
+
 
 if __name__ == "__main__":
     sys.path.append(os.path.dirname(__file__))

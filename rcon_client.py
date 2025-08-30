@@ -1,8 +1,8 @@
-from typing import Optional
 try:
     from mcrcon import MCRcon
 except Exception:
     MCRcon = None
+
 
 class RconClient:
     def __init__(self, host: str, port: int, password: str, timeout: float = 5.0, dry_run: bool = False):
@@ -10,7 +10,7 @@ class RconClient:
         self.port = int(port)
         self.password = password
         self.timeout = float(timeout)
-        self.conn: Optional[MCRcon] = None
+        self.conn: MCRcon | None = None
         self.dry_run = dry_run
 
     def connect(self):

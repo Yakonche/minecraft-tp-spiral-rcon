@@ -6,3 +6,4 @@ saves/
 *.pyo
 *.pyd
 *.log
+pyproject.toml

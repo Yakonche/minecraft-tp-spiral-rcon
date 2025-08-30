@@ -1,7 +1,9 @@
 import curses
 import re
-from .utils import add_safe, add_cols, cols_len, clip_cols
-from .widgets import box, render_dimension, render_position, line_row
+
+from .utils import add_cols, add_safe, clip_cols, cols_len
+from .widgets import box, line_row, render_dimension, render_position
+
 
 class StatsView:
     def __init__(self):
@@ -11,14 +13,19 @@ class StatsView:
         self._stable_card_w = None
 
     def _hearts_bar(self, v):
-        s = str(v or "")
+        s = str(v or "").strip()
+        if "❤️" in s or "🤍" in s:
+            s = s.replace(" ", "")
+            reds = s.count("❤️")
+            halves = 1 if "❤️🤍" in s else 0
+            return ("❤️" * reds) + ("🤍" if halves else "")
         m = re.findall(r"[-+]?\d+(?:\.\d+)?", s)
-        f = float(m[0]) if m else 20.0
-        f = max(0.0, min(20.0, f))
-        halves = int(f + 1e-6)
-        full = halves // 2
-        half = halves % 2
-        return ("❤️" * full) + ("♥" if half else "")
+        if not m:
+            return ""
+        f = max(0.0, min(20.0, float(m[0])))
+        full = int(f // 2)
+        half = 1 if (f % 2) >= 1 else 0
+        return ("❤️" * full) + ("🤍" if half else "")
 
     def _fmt_num(self, v):
         try:
@@ -28,17 +35,41 @@ class StatsView:
         except Exception:
             return str(v or "")
 
-    def _hunger_field(self, v):
+    def _hunger_field(self, v, saturation=None):
         s = str(v or "").strip()
         if "🍗" in s:
-            return s.replace(" ", "")
+            s2 = s.replace(" ", "")
+            if saturation is not None:
+                sstr = str(saturation).replace(",", ".")
+                m2 = re.findall(r"[-+]?\d+(?:\.\d+)?", sstr)
+                sat = float(m2[0]) if m2 else 0.0
+                n = max(0, int(round(sat / 2.0)))
+                if n > 0:
+                    out = []
+                    c = 0
+                    for ch in s2:
+                        base = "🍗" if ch in ("🍗", "🍖") else ch
+                        if base == "🍗" and c < n:
+                            out.append("🍖")
+                            c += 1
+                        else:
+                            out.append(base)
+                    return "".join(out).replace("🤍", "")
+            return s2.replace("🤍", "")
         m = re.findall(r"[-+]?\d+(?:\.\d+)?", s)
-        if not m: return s
+        if not m:
+            return s
         f = max(0.0, min(20.0, float(m[0])))
         halves = int(f + 1e-6)
-        bar = "🍗" * 10
-        clipped, _ = clip_cols(bar, halves)
-        return clipped
+        shanks = halves // 2
+        if saturation is None:
+            return "🍗" * shanks
+        sstr = str(saturation).replace(",", ".")
+        m2 = re.findall(r"[-+]?\d+(?:\.\d+)?", sstr)
+        sat = float(m2[0]) if m2 else 0.0
+        n = max(0, int(round(sat / 2.0)))
+        n = min(n, shanks)
+        return ("🍖" * n) + ("🍗" * (shanks - n))
 
     def _max_field_width(self, items):
         m = 0
@@ -73,7 +104,6 @@ class StatsView:
         left_w = max(cols_len(lbl) for lbl in labels)
         right_w = max(0, card_w - (left_w + 5))
         cols = max(1, Ws // card_w)
-
 
         for i, p in enumerate(cards):
             r = i // cols
@@ -115,27 +145,69 @@ class StatsView:
             add_safe(win, y + 1, dot_x, "●", curses.color_pair(cp["green"] if online else cp["red"]))
             repaint(y + 1)
 
-            add_cols(win, y + 2, x, line_row("Santé", self._hearts_bar(p.get("health", "")), left_w, right_w),
-                     card_w, curses.color_pair(cp["white"]))
+            add_cols(
+                win,
+                y + 2,
+                x,
+                line_row("Santé", self._hearts_bar(p.get("health", "")), left_w, right_w),
+                card_w,
+                curses.color_pair(cp["white"]),
+            )
             repaint(y + 2)
 
-            add_cols(win, y + 3, x, line_row("Faim", self._hunger_field(p.get("hunger", "")), left_w, right_w),
-                     card_w, curses.color_pair(cp["white"]))
+            add_cols(
+                win,
+                y + 3,
+                x,
+                line_row(
+                    "Faim",
+                    self._hunger_field(
+                        p.get("hunger", "") or p.get("foodLevel") or p.get("food_level") or p.get("food"),
+                        p.get("saturation")
+                        or p.get("Saturation")
+                        or p.get("foodSaturationLevel")
+                        or p.get("food_saturation")
+                        or p.get("sat"),
+                    ),
+                    left_w,
+                    right_w,
+                ),
+                card_w,
+                curses.color_pair(cp["white"]),
+            )
             repaint(y + 3)
 
-            add_cols(win, y + 4, x, line_row("LVL", p.get("lvl", ""), left_w, right_w),
-                     card_w, curses.color_pair(cp["white"]))
+            add_cols(
+                win,
+                y + 4,
+                x,
+                line_row("LVL", p.get("lvl", ""), left_w, right_w),
+                card_w,
+                curses.color_pair(cp["white"]),
+            )
             repaint(y + 4)
 
-            add_cols(win, y + 5, x, line_row("Score / XP", p.get("score", ""), left_w, right_w),
-                     card_w, curses.color_pair(cp["white"]))
+            add_cols(
+                win,
+                y + 5,
+                x,
+                line_row("Score / XP", p.get("score", ""), left_w, right_w),
+                card_w,
+                curses.color_pair(cp["white"]),
+            )
             repaint(y + 5)
 
             render_dimension(win, y + 6, x, left_w, card_w, p.get("dim", ""), cp)
             repaint(y + 6)
 
-            add_cols(win, y + 7, x, line_row("Mode de Jeu", p.get("gm", ""), left_w, right_w),
-                     card_w, curses.color_pair(cp["white"]))
+            add_cols(
+                win,
+                y + 7,
+                x,
+                line_row("Mode de Jeu", p.get("gm", ""), left_w, right_w),
+                card_w,
+                curses.color_pair(cp["white"]),
+            )
             repaint(y + 7)
 
             render_position(win, y + 8, x, left_w, card_w, p.get("pos", ""), cp)

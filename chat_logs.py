@@ -1,27 +1,33 @@
-import os, time, re, io
+import glob
+import gzip
+import os
+import re
+import time
 
 CHAT_MAIN = re.compile(r"^\[([0-9]{2}:[0-9]{2}:[0-9]{2})\].*?: <([^>]+)> (.*)$")
 CHAT_SERVER = re.compile(r"^\[([0-9]{2}:[0-9]{2}:[0-9]{2})\].*?\]: \[(?:Server|RCON|Rcon)\] (.*)$")
 
+
 def _tail_last_lines(path, n=200):
     try:
-        with open(path, 'rb') as f:
+        with open(path, "rb") as f:
             f.seek(0, os.SEEK_END)
             size = f.tell()
             block = 4096
-            data = b''
+            data = b""
             pos = size
-            while pos > 0 and data.count(b'\n') <= n:
+            while pos > 0 and data.count(b"\n") <= n:
                 delta = block if pos >= block else pos
                 pos -= delta
                 f.seek(pos)
                 data = f.read(delta) + data
-            text = data.decode('utf-8', errors='ignore').splitlines()[-n:]
+            text = data.decode("utf-8", errors="ignore").splitlines()[-n:]
             return text
     except FileNotFoundError:
         return []
     except Exception:
         return []
+
 
 class LogTail:
     def __init__(self, path):
@@ -31,7 +37,7 @@ class LogTail:
         self.preloaded = False
 
     def _open(self):
-        f = open(self.path, 'r', encoding='utf-8', errors='ignore')
+        f = open(self.path, encoding="utf-8", errors="ignore")
         st = os.fstat(f.fileno())
         inode = st.st_ino
         size = st.st_size
@@ -45,7 +51,6 @@ class LogTail:
         return f
 
     def follow(self, stop_event):
-        # preload last lines once
         if not self.preloaded:
             for line in _tail_last_lines(self.path, n=200):
                 yield line
@@ -60,17 +65,18 @@ class LogTail:
                             time.sleep(0.1)
                             break
                         self.pos = f.tell()
-                        yield line.rstrip('\n')
+                        yield line.rstrip("\n")
             except FileNotFoundError:
                 time.sleep(0.5)
 
     def force_refresh(self):
         try:
-            with open(self.path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(self.path, encoding="utf-8", errors="ignore") as f:
                 f.seek(0, os.SEEK_END)
                 self.pos = f.tell()
         except Exception:
             pass
+
 
 def parse_chat(line):
     m = CHAT_MAIN.match(line)
@@ -80,3 +86,18 @@ def parse_chat(line):
     if m:
         return m.group(1), "RCON", m.group(2), "rcon_say"
     return None
+
+
+def iter_archives(path):
+    d = os.path.dirname(path)
+    files = sorted(glob.glob(os.path.join(d, "*.log.gz")))
+    for fp in files:
+        bn = os.path.basename(fp)
+        date = bn[:10]
+        yield "__SEP__ " + date
+        try:
+            with gzip.open(fp, "rt", encoding="utf-8", errors="ignore") as g:
+                for line in g:
+                    yield line.rstrip("\n")
+        except Exception:
+            continue

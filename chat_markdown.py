@@ -1,8 +1,10 @@
-import re, curses
+import curses
+import re
 
 BOLD = re.compile(r"\*\*(.+?)\*\*")
 ITAL = re.compile(r"\*(.+?)\*")
 CODE = re.compile(r"`([^`]+)`")
+
 
 def render_segments(s):
     segs = []
@@ -17,7 +19,7 @@ def render_segments(s):
             break
         m = min(ms, key=lambda x: x.start())
         if m.start() > i:
-            segs.append((s[i:m.start()], curses.color_pair(1)))
+            segs.append((s[i : m.start()], curses.color_pair(1)))
         if m.re is CODE:
             segs.append((m.group(1), curses.A_REVERSE))
         elif m.re is BOLD:

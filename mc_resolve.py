@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-import sys, time, socket, select
-from config import load_config
+import select
+import socket
+import sys
+import time
+
 
 def q_resolver(nameservers, timeout):
     import dns.resolver as d
+
     r = d.Resolver(configure=False)
     r.nameservers = nameservers
     r.lifetime = timeout
     r.timeout = timeout
     return r
+
 
 def dns_simple(host, rr, timeout, nameservers=None):
     out = []
@@ -29,6 +34,7 @@ def dns_simple(host, rr, timeout, nameservers=None):
         pass
     return out
 
+
 def resolve_srv(host, timeout):
     try:
         import dns.resolver as d
@@ -48,17 +54,19 @@ def resolve_srv(host, timeout):
     except Exception:
         return None
 
+
 def authoritative_nameservers(qname, timeout):
     try:
-        import dns.resolver as d, dns.name as dn
+        import dns.name as dn
+        import dns.resolver as d
     except Exception:
         return []
     labels = dn.from_text(qname).labels
     domain = dn.from_text(qname)
     ns_list = []
-    for i in range(len(labels)-1):
+    for i in range(len(labels) - 1):
         try:
-            zone = dn.Name(labels[i+1:])
+            zone = dn.Name(labels[i + 1 :])
             ans = d.resolve(zone, "NS")
             for rr in ans:
                 ns_list.append(str(rr.target).rstrip("."))
@@ -70,6 +78,7 @@ def authoritative_nameservers(qname, timeout):
     for ns in ns_list:
         ns_ips += dns_simple(ns, "A", timeout) + dns_simple(ns, "AAAA", timeout)
     return ns_ips
+
 
 def resolve_ips_all(name, timeout):
     v4 = set()
@@ -85,14 +94,19 @@ def resolve_ips_all(name, timeout):
             elif f == socket.AF_INET6:
                 v6.add(sockaddr[0])
     for rr, acc in (("A", v4), ("AAAA", v6)):
-        for ns in (None, ["1.1.1.1","9.9.9.9","8.8.8.8","2606:4700:4700::1111","2620:fe::fe","2001:4860:4860::8888"]):
+        for ns in (
+            None,
+            ["1.1.1.1", "9.9.9.9", "8.8.8.8", "2606:4700:4700::1111", "2620:fe::fe", "2001:4860:4860::8888"],
+        ):
             vals = dns_simple(name, rr, timeout, ns)
             for ip in vals:
                 acc.add(ip)
     auth_ns = authoritative_nameservers(name, timeout)
     if auth_ns:
         try:
-            import dns.message as dm, dns.query as dq
+            import dns.message as dm
+            import dns.query as dq
+
             for rr, acc in (("A", v4), ("AAAA", v6)):
                 q = dm.make_query(name, rr)
                 for nsip in auth_ns:
@@ -125,8 +139,11 @@ def resolve_ips_all(name, timeout):
             pass
     return sorted(v4), sorted(v6)
 
+
 def tty_input(prompt):
-    import termios, tty
+    import termios
+    import tty
+
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     tty.setcbreak(fd)
@@ -166,6 +183,7 @@ def tty_input(prompt):
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
+
 def main():
     host = tty_input("Entrez l'adresse du server : ")
     if host is None or not host:
@@ -183,7 +201,9 @@ def main():
     print("IPv6 :", ", ".join(v6) if v6 else "-")
     print("\nAppuyez sur Échap (Esc) pour quitter.\n")
     try:
-        import termios, tty
+        import termios
+        import tty
+
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         tty.setcbreak(fd)
@@ -201,6 +221,7 @@ def main():
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
         except Exception:
             pass
+
 
 if __name__ == "__main__":
     main()

@@ -16,5 +16,9 @@
     "max_tps": 4096
   },
   "save_file": "auto",
-  "save_dir": "saves"
+  "save_dir": "saves",
+  "nbt": {
+    "playerdata": "/srv/minecraft/world/playerdata",
+    "usernamecache": "/srv/minecraft/usernamecache.json"
+  }
 }
