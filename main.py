@@ -8,10 +8,11 @@ import termios
 import tty
 
 from rich.box import ROUNDED
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.prompt import IntPrompt
 from rich.table import Table
+from rich.live import Live
 
 from chat import run_chat_console
 from config import compute_save_path, load_config, save_config
@@ -215,37 +216,67 @@ def menu_once(conf, dry_run):
         "Chat + Commandes RCON",
         "Obtenir IPs d'un serveur",
     ]
-    while True:
-        console.clear()
-        show_config(conf)
-        console.print("\nMenu :")
+
+    def _build_config_table(conf):
+        t = Table(title="Configuration", show_lines=False, show_header=False, box=ROUNDED)
+        t.add_column(justify="left")
+        t.add_column(justify="right")
+        t.add_row("RCON host", str(conf["rcon"]["host"]))
+        t.add_row("RCON port", str(conf["rcon"]["port"]))
+        t.add_row("RCON timeout (s)", str(conf["rcon"]["timeout"]))
+        e = conf["exploration"]
+        t.add_row("Joueur", e["player"])
+        t.add_row("Dimension", e["dimension"])
+        t.add_row("Hauteur (Y=)", str(e["y"]))
+        t.add_row("Chunks", str(e["chunks"]))
+        t.add_row("Spawn (X)", str(e["spawn_x"]))
+        t.add_row("Spawn (Z)", str(e["spawn_z"]))
+        t.add_row("Intervalle (s)", str(e["interval"]))
+        t.add_row("/tp max", str(e["max_tps"]))
+        t.add_row("Dossier playerdata", str(conf.get("nbt", {}).get("playerdata", "/srv/minecraft/world/playerdata")))
+        t.add_row("usernamecache.json", str(conf.get("nbt", {}).get("usernamecache", "/srv/minecraft/usernamecache.json")))
+        return t
+
+    def _render(sel):
+        t = _build_config_table(conf)
+        lines = []
         for i, text in enumerate(opts):
             pref = "➤ " if i == sel else "  "
             n = str(i + 1)
             if i == sel:
-                console.print(f"{pref}[orange1][{n}][/orange1] [green]{text}[/]")
+                lines.append(f"{pref}[orange1][{n}][/orange1] [green]{text}[/]")
             else:
-                console.print(f"{pref}[cyan][{n}][/cyan] [white]{text}[/]")
-        console.print("")
-        console.print("[grey50]Utilisez ↑/↓ puis Entrée, ou tapez 1-9, Échap pour quitter[/grey50]\n")
-        k = read_key_ext()
-        if k == "UP":
-            sel = (sel - 1) % len(opts)
-            continue
-        if k == "DOWN":
-            sel = (sel + 1) % len(opts)
-            continue
-        if k in set("123456789"):
-            ch = k
-            console.print(f"Choix : {ch}\n")
-            return ch
-        if k == "ENTER":
-            ch = str(sel + 1)
-            console.print(f"Choix : {ch}\n")
-            return ch
-        if k == "ESC":
-            console.print("Choix : Esc\n")
-            return "\x1b"
+                lines.append(f"{pref}[cyan][{n}][/cyan] [white]{text}[/]")
+        body = "\n".join(["", "Menu :", *lines, "", "[grey50]Utilisez ↑/↓ puis Entrée, ou tapez 1-9, Échap pour quitter[/grey50]", ""])
+        return Group(t, body)
+
+    choice = None
+    with Live(_render(sel), refresh_per_second=60, screen=False) as live:
+        while True:
+            k = read_key_ext()
+            if k == "UP":
+                sel = (sel - 1) % len(opts)
+                live.update(_render(sel))
+                continue
+            if k == "DOWN":
+                sel = (sel + 1) % len(opts)
+                live.update(_render(sel))
+                continue
+            if k in set("123456789"):
+                choice = k
+                break
+            if k == "ENTER":
+                choice = str(sel + 1)
+                break
+            if k == "ESC":
+                choice = "\x1b"
+                break
+
+    if choice in set("123456789"):
+        console.print(f"Choix : {choice}\n")
+    elif choice == "\x1b":
+        console.print("Choix : Esc\n")
+    return choice
 
 
 def main():
@@ -296,7 +327,7 @@ def main():
             except Exception as e:
                 console.print(f"[red]Erreur mc_resolve : {e}[/red]")
         elif ch == "\x1b":
-            console.print("\n --- PROGRAMME TERMINÉ --- \n")
+            console.print(" --- PROGRAMME TERMINÉ --- \n")
             break
 
 
